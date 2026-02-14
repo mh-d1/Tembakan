@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Three.js FPS Shooter GitHub</title>
+<style>
+body { margin:0; overflow:hidden; }
+canvas { display:block; }
+#crosshair{
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:4px;
+  height:4px;
+  margin-left:-2px;
+  margin-top:-2px;
+  background:black;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:10;
+}
+#mobileControls{
+  position:absolute;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:10px;
+  z-index:10;
+}
+.btn{
+  width:50px; height:50px;
+  background:rgba(0,0,0,0.5);
+  color:white;
+  text-align:center;
+  line-height:50px;
+  border-radius:50%;
+  user-select:none;
+  font-size:20px;
+}
+#shootBtn{
+  position:absolute;
+  bottom:20px;
+  right:20px;
+  width:60px;
+  height:60px;
+  background:rgba(0,0,0,0.5);
+  color:white;
+  border-radius:50%;
+  text-align:center;
+  line-height:60px;
+  font-size:24px;
+  user-select:none;
+  z-index:10;
+}
+</style>
+</head>
+<body>
+<div id="crosshair"></div>
+<div id="mobileControls">
+  <div class="btn" id="up">↑</div>
+  <div class="btn" id="down">↓</div>
+  <div class="btn" id="left">←</div>
+  <div class="btn" id="right">→</div>
+  <div class="btn" id="jump">⤴</div>
+</div>
+<div id="shootBtn">●</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.min.js"></script>
+<script>
+// ===== Scene & Camera =====
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 500);
+camera.position.set(0,1.6,0);
+camera.rotation.order = "YXZ";
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// ===== Light =====
+scene.add(new THREE.AmbientLight(0xffffff,1));
+const dirLight = new THREE.DirectionalLight(0xffffff,0.5);
+dirLight.position.set(10,20,10);
+scene.add(dirLight);
+
+// ===== Floor =====
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(500,500),
+  new THREE.MeshPhongMaterial({color:0x00ff00})
+);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+// ===== Targets =====
+const targets=[];
+const targetDistances = [10,50,100];
+targetDistances.forEach((z,i)=>{
+  const t = new THREE.Mesh(
+    new THREE.BoxGeometry(1,1,1),
+    new THREE.MeshPhongMaterial({color:0xff0000})
+  );
+  t.position.set((i-1)*2,0.5,-z);
+  t.health = 100;
+  scene.add(t);
+  targets.push(t);
+});
+
+// ===== Bullets =====
+const bullets=[];
+
+// Shoot
+function shoot(){
+  const bullet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05,8,8),
+    new THREE.MeshBasicMaterial({color:0xffff00})
+  );
+  bullet.position.copy(camera.position);
+  const dir = new THREE.Vector3(
+    -Math.sin(camera.rotation.y),
+    Math.sin(camera.rotation.x),
+    -Math.cos(camera.rotation.y)
+  ).normalize();
+  bullet.direction = dir;
+  bullets.push(bullet);
+  scene.add(bullet);
+}
+document.getElementById('shootBtn').addEventListener('click',shoot);
+window.addEventListener('mousedown',shoot);
+
+// ===== Player =====
+const player={speed:0.3,jump:0.3,yVel:0,onGround:true};
+const keys={};
+document.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
+
+// ===== Mobile Controls =====
+['up','down','left','right','jump'].forEach(id=>{
+  const btn = document.getElementById(id);
+  btn.addEventListener('touchstart',()=>keys[id]=true);
+  btn.addEventListener('touchend',()=>keys[id]=false);
+});
+
+// ===== Mouse Look =====
+let isMouseDown=false;
+document.addEventListener('mousedown',()=>isMouseDown=true);
+document.addEventListener('mouseup',()=>isMouseDown=false);
+document.addEventListener('mousemove',(e)=>{
+  if(isMouseDown){
+    const sensitivity = 0.002;
+    camera.rotation.y -= e.movementX * sensitivity;
+    camera.rotation.x -= e.movementY * sensitivity;
+    const limit = Math.PI/2 - 0.1;
+    camera.rotation.x = Math.max(-limit, Math.min(limit, camera.rotation.x));
+  }
+});
+
+// ===== Animate =====
+function animate(){
+  requestAnimationFrame(animate);
+
+  // Movement
+  const dir = new THREE.Vector3();
+  if(keys['w']||keys['up']) dir.z -=1;
+  if(keys['s']||keys['down']) dir.z +=1;
+  if(keys['a']||keys['left']) dir.x -=1;
+  if(keys['d']||keys['right']) dir.x +=1;
+
+  dir.normalize().multiplyScalar(player.speed);
+
+  const forward = new THREE.Vector3(
+    -Math.sin(camera.rotation.y),0,-Math.cos(camera.rotation.y)
+  ).normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0));
+
+  camera.position.add(forward.clone().multiplyScalar(dir.z));
+  camera.position.add(right.clone().multiplyScalar(dir.x));
+
+  // Jump
+  if((keys[' ']||keys['jump']) && player.onGround){
+    player.yVel=player.jump;
+    player.onGround=false;
+  }
+  player.yVel -=0.02;
+  camera.position.y += player.yVel;
+  if(camera.position.y<1.6){ camera.position.y=1.6; player.yVel=0; player.onGround=true; }
+
+  // Bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    const b = bullets[i];
+    b.position.add(b.direction.clone().multiplyScalar(1));
+
+    for(const t of targets){
+      if(b.position.distanceTo(t.position)<0.6 && t.health>0){
+        t.health-=100;
+        if(t.health<=0) scene.remove(t);
+        scene.remove(b);
+        bullets.splice(i,1);
+        break;
+      }
+    }
+
+    if(bullets[i] && b.position.distanceTo(camera.position)>500){
+      scene.remove(bullets[i]);
+      bullets.splice(i,1);
+    }
+  }
+
+  renderer.render(scene,camera);
+}
+animate();
+
+// ===== Resize =====
+window.addEventListener('resize',()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
