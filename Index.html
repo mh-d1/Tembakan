@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Three.js Shooter Fix</title>
+<style>
+body { margin: 0; overflow: hidden; }
+canvas { display: block; }
+#crosshair{
+  position: absolute;
+  top:50%;
+  left:50%;
+  width:10px;
+  height:10px;
+  margin-left:-5px;
+  margin-top:-5px;
+  border:2px solid black;
+  border-radius:50%;
+}
+</style>
+</head>
+<body>
+<div id="crosshair"></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.164.0/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // langit biru
+
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0,1.6,10);
+
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Cahaya agar merah & hijau terlihat
+let ambient = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambient);
+
+let dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(5,10,5);
+scene.add(dirLight);
+
+// Lantai hijau
+let floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(100,100),
+  new THREE.MeshPhongMaterial({color:0x00ff00})
+);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+// Target merah
+let targets = [];
+for(let x=10;x<=60;x+=10){
+  let t = new THREE.Mesh(
+    new THREE.BoxGeometry(1,1,1),
+    new THREE.MeshPhongMaterial({color:0xff0000})
+  );
+  t.position.set(x,0.5,-5);
+  t.health = 100;
+  scene.add(t);
+  targets.push(t);
+}
+
+// PointerLock Controls
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener('click',()=>controls.lock());
+
+// Raycast tembak
+window.addEventListener('mousedown',()=>{
+  let ray = new THREE.Raycaster(camera.position,new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion));
+  let hits = ray.intersectObjects(targets);
+  if(hits.length>0){
+    let t = hits[0].object;
+    t.health -= 100;
+    if(t.health<=0){
+      scene.remove(t);
+      targets.splice(targets.indexOf(t),1);
+    }
+  }
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
